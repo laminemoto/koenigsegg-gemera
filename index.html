@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Koenigsegg Gemera — Guided Scroll Showcase</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/ScrollTrigger.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+<style>
+:root {
+  --bg: #05080c;
+  --accent: #00e0a0;
+  --accent2: #3a8bff;
+  --text: #e8eef5;
+  --muted: #8a97a8;
+  --danger: #ff6b6b;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+body {
+  background: radial-gradient(ellipse at 50% 0%, #0f1a2b 0%, #05080c 60%);
+  min-height: 100vh;
+}
+
+/* ===== Loading ===== */
+#loading {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  background: #05080c; color: var(--accent);
+  font-size: 14px; transition: opacity 0.8s ease;
+}
+#loading.hidden { opacity: 0; pointer-events: none; }
+.spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(0,224,160,0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== 3D Canvas ===== */
+#scene-container {
+  position: fixed; inset: 0; z-index: 1;
+  pointer-events: none;
+  transition: opacity 0.8s ease;
+}
+#scene-container canvas { display: block; width: 100%; height: 100%; }
+@media (hover: hover) and (pointer: fine) {
+  #scene-container { pointer-events: auto; }
+}
+
+/* ===== Hero ===== */
+.hero {
+  position: relative; z-index: 2;
+  min-height: 100vh; min-height: 100svh;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-end;
+  padding: 24px 16px 40px;
+  pointer-events: none;
+}
+.hero-content {
+  pointer-events: auto;
+  text-align: center; max-width: 640px; width: 100%;
+  padding: 24px; border-radius: 24px;
+  background: linear-gradient(180deg, rgba(5,8,12,0) 0%, rgba(5,8,12,0.9) 50%);
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 6px 14px; border-radius: 999px;
+  background: rgba(0,224,160,0.1);
+  border: 1px solid rgba(0,224,160,0.3);
+  color: var(--accent); font-size: 13px; margin-bottom: 16px;
+}
+.hero-badge::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.3); }
+}
+.hero h1 {
+  font-size: clamp(28px, 7vw, 52px); font-weight: 800;
+  line-height: 1.15; letter-spacing: -0.02em; margin-bottom: 12px;
+  background: linear-gradient(135deg, #fff 0%, #8a97a8 100%);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hero p {
+  font-size: clamp(14px, 4vw, 17px); color: var(--muted);
+  line-height: 1.7; max-width: 480px; margin-inline: auto;
+}
+
+/* ===== Scroll Stage (طولانی‌تر چون ۶ نقطه) ===== */
+.scroll-stage { position: relative; z-index: 2; height: 600vh; }
+
+/* ===== Stage Label ===== */
+.stage-label {
+  position: fixed; top: 24px; left: 50%;
+  transform: translateX(-50%) translateY(-10px);
+  z-index: 5; font-size: 12px; color: var(--accent);
+  background: rgba(0,224,160,0.1);
+  border: 1px solid rgba(0,224,160,0.3);
+  padding: 8px 18px; border-radius: 999px;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.4s, transform 0.4s;
+  backdrop-filter: blur(10px); white-space: nowrap;
+}
+.stage-label.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ===== Scroll Hint ===== */
+.scroll-hint {
+  position: fixed; bottom: 24px; left: 50%;
+  transform: translateX(-50%); z-index: 5;
+  font-size: 11px; color: var(--muted);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  pointer-events: none; opacity: 0.7; transition: opacity 0.4s;
+}
+.scroll-hint.hidden { opacity: 0; }
+.scroll-hint .arrow { animation: bob 1.6s ease-in-out infinite; font-size: 16px; }
+@keyframes bob {
+  0%,100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+
+/* ===== Focus Dot (نقطه روی بخش فعال) ===== */
+.focus-dot {
+  position: fixed;
+  z-index: 4;
+  width: 20px; height: 20px;
+  margin-left: -10px; margin-top: -10px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.focus-dot.visible { opacity: 1; }
+.focus-dot::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 20px var(--accent);
+  animation: focusPulse 1.6s ease-out infinite;
+}
+.focus-dot::after {
+  content: '';
+  position: absolute; inset: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+@keyframes focusPulse {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+
+/* ===== Info Card (پنل پایین صفحه) ===== */
+.info-card {
+  position: fixed;
+  z-index: 6;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%) translateY(30px);
+  width: min(560px, calc(100vw - 32px));
+  padding: 24px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(15,26,43,0.95), rgba(5,8,12,0.95));
+  border: 1px solid rgba(0,224,160,0.25);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.7), 0 0 40px rgba(0,224,160,0.1);
+  backdrop-filter: blur(20px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.5s, transform 0.5s;
+}
+.info-card.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+.info-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.info-card-icon {
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,224,160,0.15);
+  color: var(--accent);
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.info-card-title {
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.info-card-subtitle {
+  font-size: 11px;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 4px;
+}
+.info-card-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.8;
+  margin-bottom: 16px;
+}
+.info-card-specs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+@media (min-width: 480px) {
+  .info-card-specs { grid-template-columns: repeat(4, 1fr); }
+}
+.info-card-spec {
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+}
+.info-card-spec .spec-label {
+  font-size: 9px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+.info-card-spec .spec-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ===== Progress Dots ===== */
+.progress-dots {
+  position: fixed;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.progress-dots.visible { opacity: 1; }
+.progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  transition: background 0.3s, transform 0.3s, height 0.3s;
+}
+.progress-dot.active {
+  background: var(--accent);
+  height: 24px;
+  border-radius: 4px;
+  box-shadow: 0 0 12px var(--accent);
+}
+
+/* ===== Features ===== */
+.features {
+  position: relative; z-index: 2;
+  padding: 80px 24px; max-width: 900px; margin: 0 auto;
+  background: linear-gradient(180deg, rgba(5,8,12,0) 0%, rgba(5,8,12,1) 15%);
+}
+.features-title {
+  font-size: clamp(24px, 6vw, 40px); font-weight: 800;
+  text-align: center; margin-bottom: 12px;
+  background: linear-gradient(135deg, #fff, #8a97a8);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.features-sub {
+  color: var(--muted); text-align: center;
+  margin-bottom: 48px; font-size: 15px; line-height: 1.7;
+}
+.features-grid {
+  display: grid; grid-template-columns: 1fr; gap: 16px;
+}
+@media (min-width: 640px) {
+  .features-grid { grid-template-columns: repeat(3, 1fr); }
+}
+.feature {
+  padding: 24px; border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+  border: 1px solid rgba(255,255,255,0.08);
+  opacity: 0; transform: translateY(40px);
+}
+.feature-icon {
+  width: 44px; height: 44px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,224,160,0.12); color: var(--accent);
+  font-size: 22px; margin-bottom: 16px;
+}
+.feature h3 { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.feature p { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+/* ===== Advisor ===== */
+.advisor {
+  position: relative; z-index: 2;
+  padding: 80px 24px; max-width: 720px; margin: 0 auto;
+  background: #05080c;
+}
+.advisor-title {
+  font-size: clamp(24px, 6vw, 40px); font-weight: 800;
+  text-align: center; margin-bottom: 12px;
+  background: linear-gradient(135deg, #fff, #8a97a8);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.advisor-sub {
+  color: var(--muted); text-align: center;
+  margin-bottom: 40px; font-size: 15px; line-height: 1.7;
+}
+.advisor-card {
+  padding: 32px 24px;
+  border-radius: 24px;
+  background: linear-gradient(180deg, rgba(0,224,160,0.06), rgba(0,224,160,0.01));
+  border: 1px solid rgba(0,224,160,0.2);
+}
+.advisor-question {
+  font-size: 15px; font-weight: 600;
+  margin-bottom: 16px; color: var(--text);
+}
+.advisor-options {
+  display: flex; flex-direction: column; gap: 10px;
+  margin-bottom: 24px;
+}
+@media (min-width: 480px) {
+  .advisor-options { flex-direction: row; flex-wrap: wrap; }
+}
+.advisor-option {
+  padding: 12px 20px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.advisor-option:hover {
+  border-color: rgba(0,224,160,0.4);
+  background: rgba(0,224,160,0.08);
+}
+.advisor-option.selected {
+  background: rgba(0,224,160,0.15);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.advisor-result {
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(5,8,12,0.6);
+  border: 1px solid rgba(255,255,255,0.08);
+  margin-top: 8px;
+  min-height: 80px;
+  display: flex; flex-direction: column; justify-content: center;
+}
+.advisor-result .result-label {
+  font-size: 11px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+}
+.advisor-result .result-model {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+.advisor-result .result-reason {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+/* ===== Final CTA ===== */
+.final-cta {
+  position: relative; z-index: 2;
+  text-align: center; padding: 60px 24px 100px;
+  background: #05080c;
+}
+.final-cta h2 {
+  font-size: clamp(24px, 6vw, 36px); font-weight: 800;
+  margin-bottom: 16px;
+  background: linear-gradient(135deg, #fff, #8a97a8);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.final-cta p { color: var(--muted); margin-bottom: 32px; font-size: 15px; }
+.cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 28px; border-radius: 999px;
+  background: linear-gradient(135deg, var(--accent), #00b080);
+  color: #002010; font-weight: 700; font-size: 15px;
+  border: none; cursor: pointer; text-decoration: none;
+  box-shadow: 0 8px 32px rgba(0,224,160,0.35);
+  transition: transform 0.2s;
+}
+.cta:active { transform: scale(0.97); }
+</style>
+</head>
+<!-- ===== پایان قسمت ۱ — قسمت ۲ را از همین‌جا به بعد بچسبانید ===== -->
+<!-- ===== ادامه از قسمت ۱ ===== -->
+<body>
+
+<!-- ===== Loading ===== -->
+<div id="loading">
+  <div class="spinner"></div>
+  <div id="loadingText">در حال بارگذاری مدل…</div>
+</div>
+
+<!-- ===== 3D Canvas ===== -->
+<div id="scene-container"></div>
+
+<!-- ===== Focus Dot ===== -->
+<div class="focus-dot" id="focusDot"></div>
+
+<!-- ===== Stage Label (بالای صفحه) ===== -->
+<div class="stage-label" id="stageLabel">در حال کاوش…</div>
+
+<!-- ===== Progress Dots (راست صفحه) ===== -->
+<div class="progress-dots" id="progressDots"></div>
+
+<!-- ===== Info Card (پایین صفحه) ===== -->
+<div class="info-card" id="infoCard">
+  <div class="info-card-header">
+    <div class="info-card-icon" id="infoIcon">⚡</div>
+    <div>
+      <div class="info-card-subtitle" id="infoSubtitle">پیشرانه</div>
+      <div class="info-card-title" id="infoTitle">عنوان</div>
+    </div>
+  </div>
+  <p class="info-card-desc" id="infoDesc">توضیحات</p>
+  <div class="info-card-specs" id="infoSpecs"></div>
+</div>
+
+<!-- ===== Scroll Hint ===== -->
+<div class="scroll-hint" id="scrollHint">
+  <span class="arrow">↓</span>
+  <span>اسکرول کنید</span>
+</div>
+
+<!-- ===== Hero ===== -->
+<header class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">Hypercar · Hybrid · 2020</div>
+    <h1>Koenigsegg Gemera<br>هایپرکار نسل جدید</h1>
+    <p>با اسکرول، دوربین به بخش‌های مختلف خودرو پرواز می‌کند و جزئیات هر بخش را می‌بینید.</p>
+  </div>
+</header>
+
+<!-- ===== Scroll Stage (۶ فاز) ===== -->
+<div class="scroll-stage"></div>
+
+<!-- ===== Features ===== -->
+<section class="features" id="features">
+  <h2 class="features-title">مشخصات کلیدی</h2>
+  <p class="features-sub">نگاهی به آنچه Gemera را متفاوت می‌کند.</p>
+  <div class="features-grid">
+    <article class="feature">
+      <div class="feature-icon">⚡</div>
+      <h3>پیشرانه هیبریدی</h3>
+      <p>موتور ۲.۰ لیتری توربو + سه موتور الکتریکی، مجموعاً ۱۷۰۰ اسب بخار.</p>
+    </article>
+    <article class="feature">
+      <div class="feature-icon">🏎</div>
+      <h3>شتاب خیره‌کننده</h3>
+      <p>۰ تا ۱۰۰ کیلومتر در ۱.۹ ثانیه — سریع‌تر از بسیاری هایپرکارهای دو صندلی.</p>
+    </article>
+    <article class="feature">
+      <div class="feature-icon">🔋</div>
+      <h3>برد الکتریکی</h3>
+      <p>تا ۵۰ کیلومتر پیمایش تمام‌الکتریکی، مناسب حرکت شهری بی‌صدا.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ===== Advisor ===== -->
+<section class="advisor" id="advisor">
+  <h2 class="advisor-title">کدام مدل برای شما مناسب است؟</h2>
+  <p class="advisor-sub">به یک سوال پاسخ دهید تا مدل پیشنهادی را ببینید.</p>
+  <div class="advisor-card">
+    <div class="advisor-question">اولویت اصلی شما چیست؟</div>
+    <div class="advisor-options" id="advisorOptions">
+      <button class="advisor-option" data-priority="speed">حداکثر سرعت و شتاب</button>
+      <button class="advisor-option" data-priority="comfort">راحتی و فضای ۴ صندلی</button>
+      <button class="advisor-option" data-priority="electric">حرکت شهری بی‌صدا</button>
+      <button class="advisor-option" data-priority="track">عملکرد در پیست</button>
+    </div>
+    <div class="advisor-result" id="advisorResult">
+      <div class="result-label">پیشنهاد</div>
+      <div class="result-model">—</div>
+      <div class="result-reason">یک گزینه را انتخاب کنید.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Final CTA ===== -->
+<section class="final-cta">
+  <h2>آماده تجربه Gemera</h2>
+  <p>برای دریافت دموی اختصاصی و مشاوره تخصصی با ما در تماس باشید.</p>
+  <a href="#" class="cta">درخواست مشاوره</a>
+</section>
+
+<!-- ===== پایان قسمت ۲ — قسمت ۳ را از همین‌جا به بعد بچسبانید ===== -->
+<!-- ===== ادامه از قسمت ۲ ===== -->
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+gsap.registerPlugin(ScrollTrigger);
+
+/* ============================================================
+   1. THREE.JS SETUP
+   ============================================================ */
+const container = document.getElementById('scene-container');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 200);
+const renderer = new THREE.WebGLRenderer({
+  antialias: true, alpha: true, powerPreference: 'high-performance'
+});
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+container.appendChild(renderer.domElement);
+
+/* ===== نورپردازی ===== */
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
+keyLight.position.set(5, 8, 6); scene.add(keyLight);
+const rimLight = new THREE.PointLight(0x00e0a0, 8, 40);
+rimLight.position.set(-8, 4, -6); scene.add(rimLight);
+const fillLight = new THREE.PointLight(0x3a8bff, 5, 40);
+fillLight.position.set(6, -2, 4); scene.add(fillLight);
+
+/* ============================================================
+   2. STOPS — نقاط توقف اسکرول
+   هر stop: موقعیت نقطه روی مدل + دوربین + محتوای متن
+   
+   ⚠️ مختصات تقریبی هستند. با کلیدهای ← → تنظیم کنید،
+   سپس اعداد را اینجا جایگزین کنید.
+   ============================================================ */
+const STOPS = [
+  {
+    id: 'front',
+    label: 'نمای جلو',
+    point: new THREE.Vector3(0, 0.1, 1.2),
+    camera: { x: 0, y: 1.2, z: 4.5 },
+    target: { x: 0, y: 0.1, z: 1.2 },
+    icon: '💡',
+    subtitle: 'چراغ‌ها',
+    title: 'چراغ‌های LED ماتریسی',
+    description: 'چراغ‌های جلو با فناوری ماتریسی نور را هوشمند توزیع می‌کنند و از خیرگی رانندگان مقابل جلوگیری می‌کنند.',
+    specs: [
+      { label: 'نوع', value: 'LED ماتریسی' },
+      { label: 'نور', value: 'هوشمند' },
+      { label: 'عمر', value: '۲۵k ساعت' },
+      { label: 'مصرف', value: 'کم' }
+    ]
+  },
+  {
+    id: 'side',
+    label: 'نمای کنار',
+    point: new THREE.Vector3(1.0, 0.3, 0.2),
+    camera: { x: 3.8, y: 1.0, z: 1.5 },
+    target: { x: 1.0, y: 0.3, z: 0.2 },
+    icon: '🪞',
+    subtitle: 'آینه',
+    title: 'آینه‌های هوشمند',
+    description: 'آینه‌های جانبی با دوربین داخلی و نمایشگر کابین. طراحی آیرودینامیک که مقاومت هوا را کاهش می‌دهد.',
+    specs: [
+      { label: 'نوع', value: 'دوربین‌دار' },
+      { label: 'نمایشگر', value: 'کابین' },
+      { label: 'آیرودینامیک', value: 'بهینه' },
+      { label: 'جنس', value: 'کربن' }
+    ]
+  },
+  {
+    id: 'door',
+    label: 'درب',
+    point: new THREE.Vector3(0.7, 0.2, 0.1),
+    camera: { x: 2.5, y: 1.0, z: 2.2 },
+    target: { x: 0.7, y: 0.2, z: 0.1 },
+    icon: '🚪',
+    subtitle: 'درب',
+    title: 'درب‌های Dihedral Syncro',
+    description: 'درب‌ها به سمت بالا و جلو باز می‌شوند — طراحی امضای Koenigsegg که دسترسی به کابین را در فضاهای تنگ ممکن می‌کند.',
+    specs: [
+      { label: 'نوع', value: 'Dihedral' },
+      { label: 'جهت', value: 'بالا-جلو' },
+      { label: 'جنس', value: 'کربن' },
+      { label: 'وزن', value: '≈ ۸ کیلو' }
+    ]
+  },
+  {
+    id: 'wheel',
+    label: 'چرخ',
+    point: new THREE.Vector3(1.1, -0.4, 1.0),
+    camera: { x: 2.0, y: 0.0, z: 3.5 },
+    target: { x: 1.1, y: -0.4, z: 1.0 },
+    icon: '⭕',
+    subtitle: 'چرخ',
+    title: 'چرخ‌های کربنی سبک',
+    description: 'چرخ‌های آلیاژی کربن با ترمزهای سرامیکی. هر چرخ حدود ۳ کیلوگرم سبک‌تر از فولاد، که شتاب‌گیری را بهبود می‌دهد.',
+    specs: [
+      { label: 'قطر', value: '۲۱ اینچ' },
+      { label: 'متریال', value: 'کربن-سرامیک' },
+      { label: 'ترمز', value: 'کربن-سرامیک' },
+      { label: 'وزن', value: '≈ ۹ کیلو' }
+    ]
+  },
+  {
+    id: 'rear',
+    label: 'نمای عقب',
+    point: new THREE.Vector3(0, 0.3, -1.3),
+    camera: { x: 0, y: 1.2, z: -4.5 },
+    target: { x: 0, y: 0.3, z: -1.3 },
+    icon: '⚡',
+    subtitle: 'پیشرانه',
+    title: 'موتور هیبریدی ۱۷۰۰ اسب',
+    description: 'ترکیب موتور ۲.۰ لیتری توربو سه‌سیلندر با سه موتور الکتریکی. مجموع سیستم ۱۷۰۰ اسب بخار تولید می‌کند.',
+    specs: [
+      { label: 'قدرت', value: '۱۷۰۰ hp' },
+      { label: 'گشتاور', value: '۳۵۰۰ Nm' },
+      { label: 'موتور', value: '۲.۰L Turbo' },
+      { label: 'الکتریکی', value: '۳ موتور' }
+    ]
+  },
+  {
+    id: 'interior',
+    label: 'کابین',
+    point: new THREE.Vector3(0, 0.4, 0.3),
+    camera: { x: 0, y: 1.5, z: 3.0 },
+    target: { x: 0, y: 0.4, z: 0.3 },
+    icon: '🪑',
+    subtitle: 'کابین',
+    title: 'کابین ۴ صندلی لوکس',
+    description: 'برخلاف بیشتر هایپرکارها، Gemera چهار صندلی راحت با فضای پای کافی دارد. صندلی‌ها با چرم و آلکانتارا پوشیده شده‌اند.',
+    specs: [
+      { label: 'ظرفیت', value: '۴ نفر' },
+      { label: 'متریال', value: 'چرم + آلکانتارا' },
+      { label: 'فضای پای', value: 'کافی' },
+      { label: 'گرمکن', value: '۴ صندلی' }
+    ]
+  }
+];
+
+/* ============================================================
+   3. LOAD GLB
+   ============================================================ */
+const carGroup = new THREE.Group();
+scene.add(carGroup);
+
+const loadingEl = document.getElementById('loading');
+const loadingText = document.getElementById('loadingText');
+
+let carModel = null;
+
+const loader = new GLTFLoader();
+loader.load(
+  './assets/koenigsegg.glb',
+  (gltf) => {
+    const car = gltf.scene;
+
+    const box = new THREE.Box3().setFromObject(car);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const scale = 3 / maxDim;
+    car.scale.setScalar(scale);
+    const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+    car.position.sub(center);
+
+    car.traverse((child) => {
+      if (child.isMesh) {
+        child.castShadow = true;
+        child.receiveShadow = true;
+      }
+    });
+
+    carGroup.add(car);
+    carModel = car;
+
+    loadingEl.classList.add('hidden');
+    setTimeout(() => loadingEl.remove(), 800);
+
+    buildProgressDots();
+    initScrollStops();
+
+    console.log('✅ مدل بارگذاری شد');
+    console.log('💡 برای تنظیم موقعیت نقاط، از کلیدهای ← → استفاده کنید');
+  },
+  (progress) => {
+    if (progress.total) {
+      const pct = Math.round((progress.loaded / progress.total) * 100);
+      loadingText.textContent = `در حال بارگذاری مدل… ${pct}%`;
+    }
+  },
+  (err) => {
+    console.error('❌ خطا:', err);
+    loadingText.textContent = 'خطا در بارگذاری مدل — بررسی console';
+    const fallback = new THREE.Mesh(
+      new THREE.BoxGeometry(3, 1, 1.5),
+      new THREE.MeshStandardMaterial({ color: 0x00e0a0, wireframe: true })
+    );
+    carGroup.add(fallback);
+    setTimeout(() => loadingEl.classList.add('hidden'), 1500);
+    buildProgressDots();
+    initScrollStops();
+  }
+);
+
+/* ===== موقعیت اولیه دوربین ===== */
+camera.position.set(0, 1.5, 6);
+camera.lookAt(0, 0, 0);
+
+/* ===== Resize ===== */
+function resize() {
+  const w = container.clientWidth;
+  const h = container.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+resize();
+addEventListener('resize', resize);
+
+/* ============================================================
+   4. DOM REFS
+   ============================================================ */
+const infoCard = document.getElementById('infoCard');
+const infoIcon = document.getElementById('infoIcon');
+const infoSubtitle = document.getElementById('infoSubtitle');
+const infoTitle = document.getElementById('infoTitle');
+const infoDesc = document.getElementById('infoDesc');
+const infoSpecs = document.getElementById('infoSpecs');
+const stageLabel = document.getElementById('stageLabel');
+const scrollHint = document.getElementById('scrollHint');
+const focusDot = document.getElementById('focusDot');
+const progressDots = document.getElementById('progressDots');
+
+/* ===== Progress Dots ===== */
+function buildProgressDots() {
+  progressDots.innerHTML = '';
+  STOPS.forEach((stop, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'progress-dot';
+    dot.dataset.index = i;
+    progressDots.appendChild(dot);
+  });
+}
+
+function updateProgressDots(activeIndex) {
+  progressDots.querySelectorAll('.progress-dot').forEach((dot, i) => {
+    dot.classList.toggle('active', i === activeIndex);
+  });
+}
+
+/* ============================================================
+   5. INFO CARD — نمایش محتوای هر مرحله
+   ============================================================ */
+let currentStopIndex = -1;
+
+function showStopInfo(index) {
+  if (index === currentStopIndex) return;
+  currentStopIndex = index;
+
+  const stop = STOPS[index];
+
+  // Fade out
+  gsap.to(infoCard, {
+    opacity: 0, y: 20, duration: 0.25,
+    onComplete: () => {
+      infoIcon.textContent = stop.icon;
+      infoSubtitle.textContent = stop.subtitle;
+      infoTitle.textContent = stop.title;
+      infoDesc.textContent = stop.description;
+
+      infoSpecs.innerHTML = '';
+      stop.specs.forEach(spec => {
+        const div = document.createElement('div');
+        div.className = 'info-card-spec';
+        div.innerHTML = `
+          <div class="spec-label">${spec.label}</div>
+          <div class="spec-value">${spec.value}</div>
+        `;
+        infoSpecs.appendChild(div);
+      });
+
+      infoCard.classList.add('visible');
+      gsap.fromTo(infoCard,
+        { opacity: 0, y: 20 },
+        { opacity: 1, y: 0, duration: 0.4, ease: 'power2.out' }
+      );
+    }
+  });
+
+  updateProgressDots(index);
+}
+
+function hideStopInfo() {
+  infoCard.classList.remove('visible');
+  currentStopIndex = -1;
+  updateProgressDots(-1);
+}
+
+/* ============================================================
+   6. SCROLL STOPS — اصلی‌ترین مکانیک
+   ============================================================ */
+function initScrollStops() {
+  // Stage باید به تعداد STOPS بخش شود
+  // هر stop یک ScrollTrigger با scrub دارد
+  // بین stop ها، دوربین به موقعیت هدف پرواز می‌کند
+
+  const stage = document.querySelector('.scroll-stage');
+  const stageHeight = stage.offsetHeight;
+  const totalStops = STOPS.length;
+
+  // موقعیت فعلی (برای lerp)
+  const currentCam = {
+    x: camera.position.x,
+    y: camera.position.y,
+    z: camera.position.z,
+    tx: 0, ty: 0, tz: 0
+  };
+
+  // برای هر stop یک ScrollTrigger جدا
+  STOPS.forEach((stop, i) => {
+    const startPct = (i / totalStops) * 100;
+    const endPct = ((i + 1) / totalStops) * 100;
+
+    ScrollTrigger.create({
+      trigger: stage,
+      start: `${startPct}% top`,
+      end: `${endPct}% top`,
+      onEnter: () => {
+        showStopInfo(i);
+        scrollHint.classList.add('hidden');
+        stageLabel.textContent = stop.label;
+        stageLabel.classList.add('visible');
+        progressDots.classList.add('visible');
+      },
+      onEnterBack: () => {
+        showStopInfo(i);
+        scrollHint.classList.add('hidden');
+        stageLabel.textContent = stop.label;
+        stageLabel.classList.add('visible');
+        progressDots.classList.add('visible');
+      },
+      onLeave: () => {
+        if (i === totalStops - 1) {
+          // آخرین stop: مخفی کردن همه چیز
+          hideStopInfo();
+          stageLabel.classList.remove('visible');
+          progressDots.classList.remove('visible');
+          focusDot.classList.remove('visible');
+        }
+      },
+      onLeaveBack: () => {
+        if (i === 0) {
+          hideStopInfo();
+          stageLabel.classList.remove('visible');
+          progressDots.classList.remove('visible');
+          scrollHint.classList.remove('hidden');
+          focusDot.classList.remove('visible');
+        }
+      }
+    });
+  });
+
+  // یک timeline اصلی که با کل stage همگام است
+  // موقعیت دوربین و نقطه تمرکز را بین stop ها interpolate می‌کند
+  const camState = {
+    x: camera.position.x,
+    y: camera.position.y,
+    z: camera.position.z,
+    tx: 0, ty: 0, tz: 0,
+    index: 0
+  };
+
+  // ساخت keyframe ها: از موقعیت اولیه تا آخرین stop
+  const keyframes = [
+    // keyframe 0: موقعیت اولیه (نمای کلی)
+    {
+      camX: 0, camY: 1.5, camZ: 6,
+      tx: 0, ty: 0, tz: 0
+    },
+    // keyframe برای هر stop
+    ...STOPS.map(s => ({
+      camX: s.camera.x, camY: s.camera.y, camZ: s.camera.z,
+      tx: s.target.x, ty: s.target.y, tz: s.target.z
+    }))
+  ];
+
+  // ساخت یک timeline با اسکرول
+  const masterTl = gsap.timeline({
+    scrollTrigger: {
+      trigger: stage,
+      start: 'top top',
+      end: 'bottom top',
+      scrub: 1.2,
+      onUpdate: (self) => {
+        const p = self.progress;
+        const totalSegments = keyframes.length - 1;
+        const segIndex = Math.min(
+          Math.floor(p * totalSegments),
+          totalSegments - 1
+        );
+        const segProgress = (p * totalSegments) - segIndex;
+        const from = keyframes[segIndex];
+        const to = keyframes[segIndex + 1];
+
+        // درون‌یابی خطی
+        const camX = from.camX + (to.camX - from.camX) * segProgress;
+        const camY = from.camY + (to.camY - from.camY) * segProgress;
+        const camZ = from.camZ + (to.camZ - from.camZ) * segProgress;
+        const tx = from.tx + (to.tx - from.tx) * segProgress;
+        const ty = from.ty + (to.ty - from.ty) * segProgress;
+        const tz = from.tz + (to.tz - from.tz) * segProgress;
+
+        camera.position.set(camX, camY, camZ);
+        camera.lookAt(tx, ty, tz);
+
+        // به‌روزرسانی focus dot
+        // موقعیت نقطه روی مدل را به صفحه پروجکت کن
+        const worldPoint = new THREE.Vector3(tx, ty, tz);
+        carGroup.localToWorld(worldPoint);
+        const projected = worldPoint.clone().project(camera);
+
+        if (projected.z < 1 && projected.z > -1) {
+          const sx = (projected.x * 0.5 + 0.5) * window.innerWidth;
+          const sy = (-projected.y * 0.5 + 0.5) * window.innerHeight;
+          focusDot.style.left = sx + 'px';
+          focusDot.style.top = sy + 'px';
+          focusDot.classList.add('visible');
+        } else {
+          focusDot.classList.remove('visible');
+        }
+      }
+    }
+  });
+
+  // چرخش ماشین با اسکرول (دور کامل)
+  masterTl.to({}, { duration: 1 }, 0); // placeholder برای timeline
+  const carRotState = { y: 0 };
+  masterTl.to(carRotState, {
+    y: Math.PI * 2,
+    duration: 1,
+    ease: 'none',
+    onUpdate: () => {
+      carGroup.rotation.y = carRotState.y;
+    }
+  }, 0);
+
+  // پایان: محو شدن ماشین
+  const fadeState = { opacity: 1, scale: 1 };
+  ScrollTrigger.create({
+    trigger: stage,
+    start: '90% top',
+    end: 'bottom top',
+    onUpdate: (self) => {
+      const p = self.progress;
+      // فقط ۱۰٪ آخر
+      const fadeProgress = Math.max(0, (p - 0.9) / 0.1);
+      const opacity = 1 - fadeProgress;
+      const scale = 1 - fadeProgress * 0.15;
+
+      carGroup.traverse((child) => {
+        if (child.isMesh && child.material) {
+          if (!child.material.transparent) child.material.transparent = true;
+          child.material.opacity = opacity;
+        }
+      });
+      carGroup.scale.setScalar(scale);
+
+      if (fadeProgress > 0.5) {
+        container.style.opacity = '0';
+        focusDot.classList.remove('visible');
+      } else {
+        container.style.opacity = '1';
+      }
+    }
+  });
+
+  // اسکرول به stop با کلیک روی progress dot
+  progressDots.querySelectorAll('.progress-dot').forEach((dot, i) => {
+    dot.style.pointerEvents = 'auto';
+    dot.style.cursor = 'pointer';
+    dot.addEventListener('click', () => {
+      const targetY = stage.offsetTop + (i / STOPS.length) * stage.offsetHeight + 10;
+      window.scrollTo({ top: targetY, behavior: 'smooth' });
+    });
+  });
+}
+
+/* ============================================================
+   7. DEBUG: تنظیم موقعیت با کلیدهای ← →
+   ============================================================ */
+let debugStopIndex = 0;
+
+document.addEventListener('keydown', (e) => {
+  if (!carModel) return;
+
+  if (e.key === 'ArrowRight') {
+    debugStopIndex = (debugStopIndex + 1) % STOPS.length;
+    const stop = STOPS[debugStopIndex];
+    camera.position.set(stop.camera.x, stop.camera.y, stop.camera.z);
+    camera.lookAt(stop.target.x, stop.target.y, stop.target.z);
+    console.log(`🎯 Stop ${debugStopIndex}: ${stop.id}`);
+    console.log(`   camera: { x: ${stop.camera.x}, y: ${stop.camera.y}, z: ${stop.camera.z} }`);
+    console.log(`   target: { x: ${stop.target.x}, y: ${stop.target.y}, z: ${stop.target.z} }`);
+  } else if (e.key === 'ArrowLeft') {
+    debugStopIndex = (debugStopIndex - 1 + STOPS.length) % STOPS.length;
+    const stop = STOPS[debugStopIndex];
+    camera.position.set(stop.camera.x, stop.camera.y, stop.camera.z);
+    camera.lookAt(stop.target.x, stop.target.y, stop.target.z);
+    console.log(`🎯 Stop ${debugStopIndex}: ${stop.id}`);
+    console.log(`   camera: { x: ${stop.camera.x}, y: ${stop.camera.y}, z: ${stop.camera.z} }`);
+    console.log(`   target: { x: ${stop.target.x}, y: ${stop.target.y}, z: ${stop.target.z} }`);
+  }
+});
+
+<!-- ===== پایان قسمت ۳ — قسمت ۴ را از همین‌جا به بعد بچسبانید ===== -->
+/* ===== ادامه از قسمت ۳ ===== */
+
+/* ============================================================
+   8. FEATURES ANIMATION
+   ============================================================ */
+gsap.utils.toArray('.feature').forEach((el, i) => {
+  gsap.to(el, {
+    scrollTrigger: { trigger: '.features', start: 'top 80%' },
+    y: 0, opacity: 1, duration: 0.8, delay: i * 0.12, ease: 'power3.out'
+  });
+});
+
+/* ===== Hero ===== */
+gsap.from('.hero-badge', { y: 20, opacity: 0, duration: 0.8, delay: 0.3, ease: 'power3.out' });
+gsap.from('.hero h1', { y: 30, opacity: 0, duration: 1, delay: 0.45, ease: 'power3.out' });
+gsap.from('.hero p', { y: 20, opacity: 0, duration: 0.9, delay: 0.65, ease: 'power3.out' });
+
+/* ============================================================
+   9. ADVISOR (مشاوره خرید)
+   ============================================================ */
+const advisorOptions = document.querySelectorAll('.advisor-option');
+const advisorResult = document.getElementById('advisorResult');
+
+const ADVISOR_DATA = {
+  speed: {
+    model: 'Gemera — نسخه استاندارد',
+    reason: 'با ۱۷۰۰ اسب بخار و شتاب ۱.۹ ثانیه، سریع‌ترین گزینه برای علاقه‌مندان به عملکرد خالص است.'
+  },
+  comfort: {
+    model: 'Gemera — نسخه ۴ صندلی',
+    reason: 'تنها هایپرکار ۴ صندلی جهان با فضای پای کافی و صندلی‌های لوکس. مناسب سفرهای طولانی.'
+  },
+  electric: {
+    model: 'Gemera — حالت EV',
+    reason: 'تا ۵۰ کیلومتر پیمایش تمام‌الکتریکی برای حرکت شهری بی‌صدا و بدون آلودگی.'
+  },
+  track: {
+    model: 'Gemera — نسخه Track',
+    reason: 'تنظیمات آیرودینامیک پیشرفته، ترمزهای کربن-سرامیک و تعلیق سخت‌تر برای عملکرد در پیست.'
+  }
+};
+
+advisorOptions.forEach(btn => {
+  btn.addEventListener('click', () => {
+    advisorOptions.forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+
+    const priority = btn.dataset.priority;
+    const data = ADVISOR_DATA[priority];
+
+    if (data) {
+      gsap.to(advisorResult, {
+        opacity: 0, y: 10, duration: 0.2,
+        onComplete: () => {
+          advisorResult.querySelector('.result-model').textContent = data.model;
+          advisorResult.querySelector('.result-reason').textContent = data.reason;
+          gsap.to(advisorResult, { opacity: 1, y: 0, duration: 0.4 });
+        }
+      });
+    }
+  });
+});
+
+/* ============================================================
+   10. RENDER LOOP
+   ============================================================ */
+let visible = true;
+new IntersectionObserver(
+  (entries) => { visible = entries[0].isIntersecting; },
+  { threshold: 0 }
+).observe(container);
+
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (!visible) return;
+
+  const t = clock.getElapsedTime();
+  rimLight.intensity = 8 + Math.sin(t * 2) * 2;
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
